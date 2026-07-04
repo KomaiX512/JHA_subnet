@@ -32,20 +32,26 @@ You need **Python 3.10+**, **Git**, and **8 GB+ RAM** (16 GB recommended for loc
 git clone https://github.com/KomaiX512/DataAnnotation.git bittensor-subnet-template-1
 cd bittensor-subnet-template-1
 
-# Create and activate the neurons virtual environment
+# ---- Neurons virtual environment (for miner/validator scripts) ----
 python3 -m venv .venv-neurons
 source .venv-neurons/bin/activate
 
 # Install all dependencies
 pip install -r requirements.txt
+
+# Install model server dependencies (REQUIRED for Path A — self_hosted)
+pip install fastapi uvicorn
 ```
 
-> [!TIP]
-> If you plan to use the `self_hosted` backend (Path A — recommended), also
-> install the model server dependencies:
+> [!IMPORTANT]
+> **btcli virtual environment** (separate from neurons — needed for wallet
+> and registration commands):
 > ```bash
-> pip install ultralytics fastapi uvicorn torch torchvision
+> python3 -m venv .venv-btcli
+> source .venv-btcli/bin/activate
+> pip install bittensor-cli
 > ```
+> After this, `btcli --version` should print `BTCLI version: 9.7.x`.
 
 ---
 
@@ -76,6 +82,8 @@ btcli wallet list
 ### Check your coldkey address
 
 ```bash
+source .venv-neurons/bin/activate
+
 python3 -c "
 import bittensor as bt
 w = bt.wallet(name='miner', hotkey='minerhk')
@@ -90,9 +98,14 @@ print('Hotkey  SS58:', w.hotkey.ss58_address)
 
 You need **~1 TAO** on the coldkey to pay the registration burn cost.
 
-**Option A — Request testnet TAO from faucet:**
+**Option A — Swap TAO (fastest):**
 
-Visit the Bittensor Discord → `#faucet` channel and post your **coldkey** SS58 address.
+Visit **https://coinfaucet.eu/en/btc-testnet/** or the Bittensor Testnet Faucet
+to swap test tokens.  You can also use:
+
+- **Bittensor Discord** → `#testnet-faucet` channel:
+  [https://discord.gg/bittensor](https://discord.gg/bittensor)
+  Post your **coldkey** SS58 address and request testnet TAO.
 
 **Option B — Transfer from another funded wallet:**
 
@@ -110,30 +123,23 @@ btcli wallet transfer \
 **Check balance:**
 
 ```bash
-source .venv-btcli/bin/activate
+source .venv-neurons/bin/activate
 
-btcli wallet balance \
-  --wallet-name miner \
-  --network test
+# btcli balance check may error on some versions; use this Python fallback:
+python3 -c "
+import bittensor as bt
+sub = bt.subtensor(network='test')
+w = bt.wallet(name='miner')
+balance = sub.get_balance(w.coldkey.ss58_address)
+print(f'Coldkey balance: {balance}')
+"
 ```
 
 ---
 
 ## Step 3: Register on subnet 498 (testnet)
 
-### Option A: Python script (most reliable — recommended)
-
-```bash
-source .venv-neurons/bin/activate
-
-python scripts/register_on_testnet.py \
-  --wallet.name miner \
-  --wallet.hotkey minerhk \
-  --subtensor.network test \
-  --netuid 498
-```
-
-### Option B: btcli
+### Option A: btcli (recommended for external miners)
 
 ```bash
 source .venv-btcli/bin/activate
@@ -146,15 +152,43 @@ btcli subnets register \
   -y
 ```
 
+### Option B: Python script
+
+```bash
+source .venv-neurons/bin/activate
+
+python scripts/register_on_testnet.py \
+  --wallet.name miner \
+  --wallet.hotkey minerhk \
+  --subtensor.network test \
+  --netuid 498
+```
+
 **Verify registration:**
 
 ```bash
-source .venv-btcli/bin/activate
+source .venv-neurons/bin/activate
 
-btcli subnets show --netuid 498 --network test
+python3 -c "
+import bittensor as bt
+sub = bt.subtensor(network='test')
+mg = sub.metagraph(netuid=498)
+w = bt.wallet(name='miner', hotkey='minerhk')
+if w.hotkey.ss58_address in mg.hotkeys:
+    uid = mg.hotkeys.index(w.hotkey.ss58_address)
+    print(f'✅ Registered on subnet 498 — UID: {uid}')
+    print(f'   Stake: {float(mg.S[uid]):.2f} TAO')
+else:
+    print('❌ NOT registered on subnet 498')
+"
 ```
 
-You should see your hotkey in the miner list.
+> [!WARNING]
+> **Stake limit**: Do NOT stake more than **4,000 TAO** on your miner hotkey.
+> If your stake exceeds `vpermit_tao_limit` (default 4,096 TAO), the validator
+> will **skip your miner** during sampling because it classifies you as a
+> validator.  Miners should keep their stake minimal (1-10 TAO is sufficient
+> for registration).
 
 ---
 
@@ -165,9 +199,18 @@ You should see your hotkey in the miner list.
 cp .env.example .env
 ```
 
-Open `.env` and set these values:
+Open `.env` and set these values for **testnet**:
 
 ```bash
+# ===== SUBNET (TESTNET) =====
+NETUID=498
+SUBTENSOR_NETWORK=test
+SUBTENSOR_CHAIN_ENDPOINT=wss://test.finney.opentensor.ai:443
+
+# ===== WALLET =====
+WALLET_NAME=miner
+WALLET_HOTKEY=minerhk
+
 # ===== R2 STORAGE (shared bucket — contact subnet owner for credentials) =====
 R2_BUCKET_NAME=subnet
 R2_ACCOUNT_ID=51abf57b5c6f9b6cf2f91cc87e0b9ffe
@@ -175,12 +218,16 @@ R2_S3_ENDPOINT=https://51abf57b5c6f9b6cf2f91cc87e0b9ffe.r2.cloudflarestorage.com
 R2_ENDPOINT_URL=https://51abf57b5c6f9b6cf2f91cc87e0b9ffe.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=6db9f1b555e51d83a73b3d6f0c3a5c26
 R2_SECRET_ACCESS_KEY=1270b967bbd3cc88c65f6d3216e8cf730ea7954b37cb23f867abd57a7ac2f4ba
-R2_PUBLIC_BUCKET_URL=https://pub-3aa7ed152eb9407cb756c8349a5ef02f.r2.dev
+# R2_PUBLIC_BUCKET_URL=https://pub-3aa7ed152eb9407cb756c8349a5ef02f.r2.dev
 
 # ===== MINER CONFIG =====
 MINER_MODEL_BACKEND=self_hosted       # or: yolo_local, openai_vision
 MINER_ANNOTATION_WORKSPACE=./artifacts/miner_annotation
 MINER_R2_PREFIX=miners/annotations
+
+# ===== SELF-HOSTED SERVER (Path A) =====
+SELF_HOSTED_TRAIN_URL=http://localhost:8081/train
+SELF_HOSTED_INFER_URL=http://localhost:8081/infer
 ```
 
 **Required fields summary:**
@@ -197,7 +244,8 @@ MINER_R2_PREFIX=miners/annotations
 > [!TIP]
 > The Climate MRV dataset is served by the **validator** — miners do NOT need
 > to download satellite imagery themselves.  The validator sends image URLs
-> inside each `AnnotationTask` synapse.
+> inside each `AnnotationTask` synapse.  The `.env` file is auto-loaded by the
+> miner script — you do NOT need to `source .env` manually.
 
 ---
 
@@ -227,13 +275,29 @@ env PYTHONPATH=. python server.py \
 
 You should see:
 ```
-INFO:     Started server process [xxxxx]
-INFO:     Uvicorn running on http://127.0.0.1:8081
+============================================================
+  Reference Self-Hosted Model Server v2.0
+============================================================
+  Host:       127.0.0.1
+  Port:       8081
+  Checkpoint: yolov8n.pt
+  YOLO avail: True
+  PIL avail:  True
 ```
 
 **Test the server is responding:**
 ```bash
 curl -s http://127.0.0.1:8081/health | python3 -m json.tool
+```
+
+Expected output:
+```json
+{
+    "status": "ok",
+    "active_jobs": 0,
+    "models_registered": 0,
+    "ultralytics_available": true
+}
 ```
 
 ### Path B: `yolo_local` — GPU fine-tuning (requires NVIDIA GPU)
@@ -268,7 +332,6 @@ Open a **new terminal** (keep the server terminal running if using Path A):
 
 ```bash
 source .venv-neurons/bin/activate
-source .env
 
 env PYTHONPATH=. python neurons/miner.py \
   --wallet.name miner \
@@ -283,9 +346,23 @@ env PYTHONPATH=. python neurons/miner.py \
   --logging.debug
 ```
 
+> [!TIP]
+> **Local Simulation / NAT loopback workaround**:
+> If you are running the miner and validator on the **same machine** for testing,
+> network NAT loopback restrictions may block the validator from reaching the miner's
+> public IP. To fix this, run the validator with the environment variable:
+> `LOCALNET_MINER_PORT_BY_SS58=1`. This automatically patches the target IP to `127.0.0.1`.
+
+> [!NOTE]
+> You do NOT need to run `source .env` before the miner script.  The miner
+> auto-loads `.env` via `python-dotenv`.  Command-line flags override `.env`
+> values.
+
 **Expected startup logs:**
 ```
-Serving miner axon on port 8091
+Running neuron on subnet: 498 with uid <YOUR_UID> using network: wss://test.finney.opentensor.ai:443
+Miner using ModelTrainingAnnotationEngine with backend=self_hosted
+Serving miner axon ... on network: wss://test.finney.opentensor.ai:443 with netuid: 498
 Miner running...
 ```
 
@@ -328,11 +405,17 @@ Miner running...
 source .venv-neurons/bin/activate
 
 python3 -c "
+from dotenv import load_dotenv
+load_dotenv()
 import os, boto3
+from botocore.config import Config
+
 s3 = boto3.client('s3',
     endpoint_url=os.getenv('R2_ENDPOINT_URL'),
     aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
     aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
+    region_name='auto',
+    config=Config(signature_version='s3v4'),
 )
 resp = s3.list_objects_v2(Bucket=os.getenv('R2_BUCKET_NAME'), Prefix='miners/annotations/', MaxKeys=10)
 for obj in resp.get('Contents', []):
@@ -342,9 +425,22 @@ for obj in resp.get('Contents', []):
 
 **Check metagraph status:**
 ```bash
-source .venv-btcli/bin/activate
+source .venv-neurons/bin/activate
 
-btcli subnets show --netuid 498 --network test
+python3 -c "
+import bittensor as bt
+sub = bt.subtensor(network='test')
+mg = sub.metagraph(netuid=498)
+w = bt.wallet(name='miner', hotkey='minerhk')
+if w.hotkey.ss58_address in mg.hotkeys:
+    uid = mg.hotkeys.index(w.hotkey.ss58_address)
+    print(f'UID: {uid}')
+    print(f'Serving: {mg.axons[uid].is_serving}')
+    print(f'Stake: {float(mg.S[uid]):.2f}')
+    print(f'Trust: {float(mg.T[uid]):.6f}')
+    print(f'Incentive: {float(mg.I[uid]):.6f}')
+    print(f'Validator Permit: {bool(mg.validator_permit[uid])}')
+"
 ```
 
 ### Troubleshooting checklist
@@ -356,7 +452,9 @@ btcli subnets show --netuid 498 --network test
 | `Connection refused` (self_hosted) | Start the server in Step 5 |
 | `WalletError: no coldkey found` | Run `btcli wallet list` to verify wallet name |
 | Model backend crash | Check `--miner.model_backend` matches `.env` `MINER_MODEL_BACKEND` |
-| No validator task received | Validator may be offline; wait and check validator logs |
+| No validator task received | Validator may be offline; also check your stake is < 4096 TAO |
+| Validator skips your miner | Your stake may exceed `vpermit_tao_limit` (4096). See Warning in Step 3. |
+| `Missing required packages` | Run `pip install fastapi uvicorn` in `.venv-neurons` |
 
 ---
 
@@ -390,6 +488,16 @@ and do NOT need a GEE account to participate.
 If you want to run your own data pipeline or download supplementary training
 data, follow the GEE setup in the Validator guide.
 
+### Data sources reference
+
+For full details on the satellite imagery and golden-sample datasets used by
+this subnet, see the **Climate MRV Data Sources Specification** document in
+the repository root.  Key sources include:
+
+- **Raw imagery**: Sentinel-2 Surface Reflectance (10m), Sentinel-1 SAR (10m)
+- **Golden samples**: Hansen Global Forest Change, ESA WorldCover, JRC TMF,
+  Dynamic World, RADD Alerts
+
 ---
 
 ## R2 Bucket path structure
@@ -400,7 +508,7 @@ Each miner writes to its own directory inside the shared bucket:
 subnet/
 └── miners/
     └── annotations/
-        └── <image_id>/
+        └── <task_id>/
             ├── annotations.json    ← miner's annotation output
             └── debug_image.jpg     ← optional annotated image
 ```
