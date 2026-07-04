@@ -31,13 +31,22 @@ You need Python 3.10+, Git, and at least 16 GB RAM (GEE downloads can be large).
 git clone https://github.com/KomaiX512/DataAnnotation.git bittensor-subnet-template-1
 cd bittensor-subnet-template-1
 
-# Create and activate the neurons virtual environment
+# ---- Neurons virtual environment (for validator scripts) ----
 python3 -m venv .venv-neurons
 source .venv-neurons/bin/activate
 
 # Install all dependencies
 pip install -r requirements.txt
 ```
+
+> [!IMPORTANT]
+> **btcli virtual environment** (separate from neurons — needed for wallet
+> and registration commands):
+> ```bash
+> python3 -m venv .venv-btcli
+> source .venv-btcli/bin/activate
+> pip install bittensor-cli
+> ```
 
 > [!TIP]
 > For GEE access, also install the Earth Engine Python API:
@@ -162,7 +171,7 @@ R2_S3_ENDPOINT=https://51abf57b5c6f9b6cf2f91cc87e0b9ffe.r2.cloudflarestorage.com
 R2_ENDPOINT_URL=https://51abf57b5c6f9b6cf2f91cc87e0b9ffe.r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=6db9f1b555e51d83a73b3d6f0c3a5c26
 R2_SECRET_ACCESS_KEY=1270b967bbd3cc88c65f6d3216e8cf730ea7954b37cb23f867abd57a7ac2f4ba
-R2_PUBLIC_BUCKET_URL=https://pub-3aa7ed152eb9407cb756c8349a5ef02f.r2.dev
+# R2_PUBLIC_BUCKET_URL=https://pub-3aa7ed152eb9407cb756c8349a5ef02f.r2.dev
 
 # ===== CLIMATE MRV DATASET =====
 VALIDATOR_GOLDEN_DATASET=climate_mrv
@@ -257,7 +266,6 @@ CLIMATE_MRV_FALLBACK_DIR=data/climate_mrv/samples
 
 ```bash
 source .venv-neurons/bin/activate
-source .env
 
 PROJECT_ROOT="$(pwd)"
 
@@ -273,8 +281,20 @@ env PYTHONPATH=. python neurons/validator.py \
   --neuron.flywheel_image_cache_root "${PROJECT_ROOT}/data/flywheel/image_cache" \
   --neuron.flywheel_commercial_dataset_prefix "file://${PROJECT_ROOT}/artifacts/commercial_dataset" \
   --neuron.flywheel_commercial_export_every 10 \
+  --neuron.annotation_timeout 120 \
   --logging.debug
 ```
+
+> [!IMPORTANT]
+> The `.env` file is auto-loaded by the validator via `python-dotenv`.
+> You do NOT need to run `source .env`.  The `--neuron.annotation_timeout 120`
+> flag gives miners 120 seconds to download images, run inference, and upload
+> annotations.  The default (10s) is too short for 30-image batches.
+>
+> If you are running both the validator and miner on the **same machine** for testing,
+> network NAT loopback restrictions may block the validator from reaching the miner's
+> public IP. To fix this, prefix the validator command with `LOCALNET_MINER_PORT_BY_SS58=1`.
+> This forces the validator to route axon queries to `127.0.0.1`.
 
 ### Mainnet (when subnet goes live)
 

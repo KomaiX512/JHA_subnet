@@ -18,6 +18,14 @@ import argparse
 import sys
 
 import bittensor as bt
+_orig_wallet = bt.wallet
+class PasswordWallet(_orig_wallet):
+    @property
+    def coldkey(self):
+        return self.get_coldkey(password="5121472")
+    def unlock_coldkey(self):
+        return self.get_coldkey(password="5121472")
+bt.wallet = PasswordWallet
 
 
 def parse_args():

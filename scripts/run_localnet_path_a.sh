@@ -14,7 +14,6 @@ fi
 # Configuration
 CHAIN_ENDPOINT="ws://127.0.0.1:9944"
 NETUID=2
-MINER_SS58="5D2arEMxp1ThBjtaBj2xb2mfE1wapV9rJgbWrhS9NrqTnUDk"
 RUN_DURATION=180 # 3 minutes
 
 log() {
@@ -38,6 +37,7 @@ mkdir -p "$ROOT_DIR/artifacts/localnet/self_hosted_image_cache"
 mkdir -p "$ROOT_DIR/artifacts/localnet/self_hosted_commercial"
 
 NEURON_PYTHON="$ROOT_DIR/.venv-neurons/bin/python"
+MINER_SS58="$($NEURON_PYTHON -c "import bittensor as bt; print(bt.wallet(name='miner', hotkey='minerhk').hotkey.ss58_address)")"
 
 # Verify subtensor
 log "Checking subtensor chain endpoint at $CHAIN_ENDPOINT..."
@@ -54,8 +54,8 @@ $NEURON_PYTHON - <<'PY'
 import bittensor as bt
 st = bt.subtensor(network="ws://127.0.0.1:9944")
 mg = st.metagraph(2)
-miner_hk = "5D2arEMxp1ThBjtaBj2xb2mfE1wapV9rJgbWrhS9NrqTnUDk"
-val_hk = "5GLKt4GLTKGvHFZQPEb72PfeFMCMeSdsBQ6yD6jN9vERiGYb"
+miner_hk = bt.wallet(name="miner", hotkey="minerhk").hotkey.ss58_address
+val_hk = bt.wallet(name="validator", hotkey="valhk").hotkey.ss58_address
 if miner_hk not in mg.hotkeys:
     print(f"ERROR: Miner hotkey {miner_hk} is not registered.")
     exit(1)
@@ -121,6 +121,7 @@ env PYTHONPATH="$ROOT_DIR" \
   --netuid "$NETUID" \
   --axon.port 8090 \
   --neuron.sample_size 1 \
+  --neuron.epoch_length 1 \
   --neuron.forward_step_sleep_seconds 15 \
   --neuron.annotation_timeout 300 \
   --neuron.flywheel_annotation_request_size 5 \
