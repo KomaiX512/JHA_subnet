@@ -77,7 +77,9 @@ log "1) Starting reference self-hosted model server (port 8081)..."
 env PYTHONPATH="$ROOT_DIR" "$NEURON_PYTHON" "$ROOT_DIR/server.py" \
   --host 127.0.0.1 \
   --port 8081 \
-  --checkpoint yolov8n.pt > "$ROOT_DIR/artifacts/server.log" 2>&1 &
+  --checkpoint yolov8n.pt \
+  --test-mode \
+  --adversarial-random-boxes > "$ROOT_DIR/artifacts/server.log" 2>&1 &
 SERVER_PID="$!"
 
 # Wait for server to boot

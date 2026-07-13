@@ -512,7 +512,7 @@ def _inject_synthetic_placeholder_chips(
         return
 
     classes = CLIMATE_MRV_CLASSES if labeled else []
-    rng = random.Random(cfg.golden_split_seed + 99)
+    rng = random.Random(cfg.golden_split_seed + 99 + (100 if labeled else 0))
 
     for i in range(n):
         # Create a synthetic chip: solid colour band per class
@@ -523,7 +523,7 @@ def _inject_synthetic_placeholder_chips(
         )
         img = Image.new("RGB", (_CHIP_SIZE_PX, _CHIP_SIZE_PX), color)
         draw = ImageDraw.Draw(img)
-        draw.text((10, 10), f"MRV-PLACEHOLDER-{i}", fill=(255, 255, 255))
+        draw.text((10, 10), f"MRV-PLACEHOLDER-{'L' if labeled else 'U'}-{i}", fill=(255, 255, 255))
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         chip_bytes = buf.getvalue()
@@ -659,17 +659,18 @@ def download_sample_chips(output_dir: Path, n_chips: int = 50) -> None:
 
     # Public domain Sentinel-2 browse thumbnails from Copernicus Browser
     # (STAC-based, no authentication required)
-    STAC_ENDPOINT = "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-2/items"
+    STAC_ENDPOINT = "https://stac.dataspace.copernicus.eu/v1/search"
     params = (
-        "?bbox=-55,-5,-48,-1"
+        "?collections=sentinel-2-l2a"
+        "&bbox=-55,-5,-48,-1"
         "&datetime=2023-06-01T00:00:00Z/2023-12-31T23:59:59Z"
-        "&query[eo:cloud_cover][lt]=20"
-        f"&limit={min(n_chips, 20)}"
+        f"&limit={min(n_chips, 50)}"
     )
     url = STAC_ENDPOINT + params
 
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
             catalog = json.loads(resp.read().decode())
         features = catalog.get("features", [])
         for i, feat in enumerate(features[:n_chips]):
@@ -682,7 +683,8 @@ def download_sample_chips(output_dir: Path, n_chips: int = 50) -> None:
             if not thumb_url:
                 continue
             try:
-                with urllib.request.urlopen(thumb_url, timeout=30) as img_resp:
+                img_req = urllib.request.Request(thumb_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(img_req, timeout=30) as img_resp:
                     img_bytes = img_resp.read()
                 dest = raw_dir / f"s2_chip_{i:04d}.jpg"
                 dest.write_bytes(img_bytes)

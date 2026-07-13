@@ -466,10 +466,9 @@ work on **testnet** and **mainnet** with these changes:
 | `--neuron.sample_size` | `3` | `50` | `50` |
 
 > [!TIP]
-> For testnet, you can get test TAO via:
-> ```bash
-> btcli wallet faucet --wallet-name <NAME> --network wss://test.finney.opentensor.ai:443
-> ```
+> For testnet, you can obtain testnet TAO from the web faucet at:
+> **https://taoswap.org/testnet-faucet**
+> Or ask in the Bittensor Discord `#testnet-faucet` channel.
 
 ---
 

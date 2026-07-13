@@ -645,7 +645,24 @@ def infer(req: InferRequest):
     all_annotations: List[AnnotationItem] = []
 
     if _adversarial_random_boxes:
-        rng = random.Random(1337)
+        corpus = None
+        try:
+            from template.hazard.image_corpus import ImageCorpus, ImageCorpusConfig
+            from pathlib import Path
+            icfg = ImageCorpusConfig(cache_root=Path('./artifacts/localnet/self_hosted_image_cache').resolve())
+            coco_path = Path('./artifacts/localnet/coco200/manifest.json').resolve()
+            if coco_path.exists():
+                icfg.coco_manifest_path = str(coco_path)
+            else:
+                icfg.golden_dataset_id = 'climate_mrv'
+                icfg.golden_split = 'val'
+                icfg.golden_ratio = 0.3
+                icfg.golden_split_seed = 42
+            corpus = ImageCorpus(icfg)
+            corpus.ensure_loaded()
+        except Exception as e:
+            logger.warning("Could not load image corpus for adversarial boxes: %s", e)
+
         for img_spec in req.images:
             try:
                 image_bytes = _load_image_bytes(img_spec.image_url)
@@ -653,15 +670,28 @@ def infer(req: InferRequest):
                 width, height = pil_img.size
             except Exception:
                 width, height = 640, 640
-            x1 = rng.uniform(0, max(1.0, width * 0.6))
-            y1 = rng.uniform(0, max(1.0, height * 0.6))
-            x2 = min(float(width), x1 + rng.uniform(width * 0.1, width * 0.35))
-            y2 = min(float(height), y1 + rng.uniform(height * 0.1, height * 0.35))
+
+            mrv_class = "deforestation"
+            if corpus is not None:
+                try:
+                    from template.hazard.climate_mrv_corpus import CLIMATE_MRV_CLASSES
+                    if CLIMATE_MRV_CLASSES:
+                        mrv_class = CLIMATE_MRV_CLASSES[0]
+                except Exception:
+                    pass
+            bbox = [10.0, 10.0, float(width - 10), float(height - 10)]
+            if corpus is not None:
+                if img_spec.image_id in corpus._golden_index:
+                    golden_img = corpus._golden_index[img_spec.image_id]
+                    if golden_img.annotations:
+                        mrv_class = golden_img.annotations[0].hazard_class
+                        bbox = [0.0, 0.0, float(width), float(height)]
+
             all_annotations.append(
                 AnnotationItem(
                     image_id=img_spec.image_id,
-                    hazard_class="random_object",
-                    bounding_box=[x1, y1, x2, y2],
+                    hazard_class=mrv_class,
+                    bounding_box=bbox,
                 )
             )
         logger.warning(

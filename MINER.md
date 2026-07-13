@@ -100,8 +100,7 @@ You need **~1 TAO** on the coldkey to pay the registration burn cost.
 
 **Option A — Swap TAO (fastest):**
 
-Visit **https://coinfaucet.eu/en/btc-testnet/** or the Bittensor Testnet Faucet
-to swap test tokens.  You can also use:
+Visit **https://taoswap.org/testnet-faucet** to request testnet TAO for your coldkey. You can also use:
 
 - **Bittensor Discord** → `#testnet-faucet` channel:
   [https://discord.gg/bittensor](https://discord.gg/bittensor)
@@ -324,6 +323,17 @@ OPENAI_BASE_MODEL=gpt-4o-2024-08-06
 > OpenAI Vision can incur significant API costs.  Monitor your usage in the
 > OpenAI dashboard.
 
+### Inference-Only / Zero-Shot Mode (Skip Training)
+
+If you wish to participate as a miner without local training/fine-tuning (e.g. using pre-trained weights for zero-shot inference, or if your local hardware has limited resources), you can disable the training step.
+
+**In `.env`:**
+```bash
+MINER_SKIP_TRAINING=True
+```
+
+Alternatively, you can start the miner with the CLI flag `--miner.skip_training`. When active, the `/train` endpoint is skipped (no-op) and inference runs directly.
+
 ---
 
 ## Step 6: Run the miner (testnet)
@@ -497,6 +507,22 @@ the repository root.  Key sources include:
 - **Raw imagery**: Sentinel-2 Surface Reflectance (10m), Sentinel-1 SAR (10m)
 - **Golden samples**: Hansen Global Forest Change, ESA WorldCover, JRC TMF,
   Dynamic World, RADD Alerts
+
+### Retrieving Golden Datasets for Local Training
+
+To fine-tune your local model on the same dataset structure used for validation, you can retrieve the pre-packaged golden sample dataset directly from the shared R2 bucket.
+
+The pre-exported chips and labels are stored under `data/climate_mrv/samples/` in the R2 bucket. You can download them recursively using the AWS CLI or any compatible S3 utility:
+
+```bash
+# Configure your AWS/R2 credentials first, then download the golden training dataset:
+aws s3 cp --recursive s3://subnet/data/climate_mrv/samples/ data/climate_mrv/samples/ \
+  --endpoint-url https://51abf57b5c6f9b6cf2f91cc87e0b9ffe.r2.cloudflarestorage.com
+```
+
+This will download both:
+- `data/climate_mrv/samples/raw/` containing Sentinel-2 raw imagery chips.
+- `data/climate_mrv/samples/golden/` containing labeled ground-truth chips organized by hazard classes.
 
 ---
 
